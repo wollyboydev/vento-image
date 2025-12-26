@@ -1,4 +1,4 @@
-import { expect, vi, beforeEach, afterEach } from 'vitest';
+import { vi, beforeEach, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 declare global {

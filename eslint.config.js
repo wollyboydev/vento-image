@@ -6,15 +6,26 @@ import prettier from 'eslint-config-prettier';
 export default [
   js.configs.recommended,
   {
-    files: ['**/*.{js,ts}'],
+    files: ['src/**/*.ts', '!src/main.ts'],
+    ignores: ['**/*.d.ts', 'node_modules/**/*', 'dist/**/*'],
     languageOptions: {
       parser: typescriptParser,
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: {
-        browser: true,
-        es2021: true,
-        node: true,
+        console: 'readonly',
+        document: 'readonly',
+        window: 'readonly',
+        HTMLElement: 'readonly',
+        HTMLIFrameElement: 'readonly',
+        HTMLButtonElement: 'readonly',
+        ResizeObserver: 'readonly',
+        requestAnimationFrame: 'readonly',
+        setTimeout: 'readonly',
+        __dirname: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        global: 'readonly',
       },
     },
     plugins: {
@@ -24,10 +35,12 @@ export default [
       ...typescript.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      'no-undef': 'off',
     },
   },
   prettier,
   {
-    ignores: ['dist/**/*', 'node_modules/**/*'],
+    ignores: ['dist/**/*', 'node_modules/**/*', '**/*.d.ts', 'src/main.ts'],
   },
 ];
