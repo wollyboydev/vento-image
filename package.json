@@ -1,0 +1,83 @@
+{
+  "name": "vento-image",
+  "version": "0.0.1",
+  "description": "A modern image gallery and viewer",
+  "type": "module",
+  "main": "./dist/vento.js",
+  "types": "./dist/types/vento.d.ts",
+  "source": "src/index.ts",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "rimraf dist && tsc --noEmitOnError false && vite build",
+    "type-check": "tsc --noEmit",
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build",
+    "commit": "cz",
+    "prepare": "husky install",
+    "test": "vitest",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "test:visual": "vitest --ui --open"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^8.50.1",
+    "@typescript-eslint/parser": "^8.50.1",
+    "@vitest/coverage-v8": "^4.0.16",
+    "@vitest/ui": "^4.0.16",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "husky": "^9.1.7",
+    "jsdom": "^27.4.0",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.4",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "vite-plugin-dts": "^3.9.1",
+    "vitest": "^4.0.16"
+  },
+  "keywords": [
+    "image",
+    "gallery",
+    "viewer",
+    "typescript",
+    "slider",
+    "carousel",
+    "lightbox"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wollyboydev/vento-image.git"
+  },
+  "homepage": "https://github.com/wollyboydev/vento-image#readme",
+  "bugs": {
+    "url": "https://github.com/wollyboydev/vento-image/issues"
+  },
+  "lint-staged": {
+    "*.{js,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml}": [
+      "prettier --write"
+    ]
+  }
+}
