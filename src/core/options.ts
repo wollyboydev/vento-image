@@ -17,6 +17,6 @@ export interface VentoOptions {
   width?: number | string | null;
   height?: number | string | null;
   showCaption?: boolean;
-  // Renderer selection from architecture spec
-  renderer?: 'dom' | 'webgl';
+  // Renderer instance is now required
+  renderer?: any;
 }

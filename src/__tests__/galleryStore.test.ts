@@ -170,4 +170,12 @@ describe('GalleryStore', () => {
     // State should remain unchanged
     expect(newState).toEqual(initialState);
   });
+
+  it('should handle SET_DRAGGING status transitions', () => {
+    store.dispatch({ type: 'SET_DRAGGING', isDragging: true });
+    expect(store.getState().status).toBe('DRAGGING');
+
+    store.dispatch({ type: 'SET_DRAGGING', isDragging: false });
+    expect(store.getState().status).toBe('IDLE');
+  });
 });

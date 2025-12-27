@@ -65,8 +65,8 @@
             -ms-user-select: none;
             user-select: none;
         }
-        
-        .vento-stage-frame > * {
+
+        .vento-stage-frame>* {
             pointer-events: none;
         }
 
@@ -234,7 +234,7 @@
     </div>
 
     <script type="module">
-        import { Vento } from './src/main.ts';
+        import { Vento, SlideRenderer, ThumbnailsRenderer } from './src/main.ts';
 
         function createFrame(id, data) {
             return {
@@ -252,7 +252,7 @@
 
         function detectVideo(href) {
             if (!href) return null;
-            
+
             try {
                 const url = new URL(href);
                 let videoId = null;
@@ -265,7 +265,7 @@
                         videoId = url.pathname.replace(/^\/(embed\/|v\/)?/, '').replace(/\/.*/, '');
                     }
                     type = 'youtube';
-                } 
+                }
                 else if (url.hostname.includes('vimeo.com')) {
                     videoId = url.pathname.replace(/^\/(video\/)?/, '').replace(/\/.*/, '');
                     type = 'vimeo';
@@ -374,9 +374,17 @@
         ];
 
         const container = document.getElementById('gallery');
+
+        // Lens Pattern: Instantiate renderers
+        const stageRenderer = new SlideRenderer();
+        const navRenderer = new ThumbnailsRenderer();
+
         const gallery = new Vento(container, frames, {
+            stage: stageRenderer,
+            nav: navRenderer
+        }, {
             autoplay: false,
-            loop: true,
+            loop: false,
             transition: 'slide',
             nav: 'thumbs',
             fullscreen: "native",
@@ -402,7 +410,7 @@
         document.querySelector('.container').appendChild(logContainer);
 
         const logEntries = document.getElementById('log-entries');
-        
+
         function addLogEntry(event, data = null) {
             const entry = document.createElement('div');
             entry.style.cssText = `

@@ -1,20 +1,32 @@
 import { GalleryState, GalleryItem } from '../../state/types';
-import { Renderer } from '../interface';
+import { Renderer } from '../types';
+import { VentoOptions } from '../../core/options';
+import { FreeScrollPhysics } from './FreeScrollPhysics';
+import { PhysicsStrategy } from '../../engine/physics/Strategy';
+import { Time } from '../../engine/Time';
 
-export class DOMNavRenderer implements Renderer {
-  private navShaft: HTMLElement;
-  private navType: 'thumbs' | 'dots' | false;
-  private navDirection: 'horizontal' | 'vertical';
+export class ThumbnailsRenderer implements Renderer {
+  private navShaft!: HTMLElement;
+  private navType: 'thumbs' | 'dots' | false = 'dots';
+  private navDirection: 'horizontal' | 'vertical' = 'horizontal';
   private navFrames: HTMLElement[] = [];
 
-  constructor(
-    navShaft: HTMLElement,
-    navType: 'thumbs' | 'dots' | false,
-    navDirection: 'horizontal' | 'vertical' = 'horizontal'
-  ) {
-    this.navShaft = navShaft;
-    this.navType = navType;
-    this.navDirection = navDirection;
+  private physics!: PhysicsStrategy;
+  private time!: Time;
+
+  public init(root: HTMLElement, options: Required<VentoOptions>): void {
+    this.navShaft = root;
+    this.navType = options.nav;
+    this.navDirection = options.navDirection;
+
+    if (this.navType === 'thumbs') {
+      this.physics = new FreeScrollPhysics({
+        friction: 0.95,
+        spring: 0.05,
+      });
+      this.time = Time.getInstance();
+      this.time.add(this.tick.bind(this));
+    }
   }
 
   public update(state: GalleryState): void {
@@ -73,6 +85,39 @@ export class DOMNavRenderer implements Renderer {
         this.navShaft.appendChild(dotEl);
         this.navFrames.push(dotEl);
       });
+    }
+  }
+  public setPosition(position: number): void {
+    if (this.navDirection === 'horizontal') {
+      this.navShaft.style.transform = `translate3d(${position}px, 0, 0)`;
+    } else {
+      this.navShaft.style.transform = `translate3d(0, ${position}px, 0)`;
+    }
+  }
+
+  public tick(deltaTime: number): void {
+    if (this.navType !== 'thumbs' || !this.physics) return;
+
+    const changed = this.physics.update();
+    if (changed) {
+      this.setPosition(this.physics.getPosition());
+    }
+  }
+
+  public drag(delta: number): void {
+    if (this.navType !== 'thumbs' || !this.physics) return;
+    const pos = this.physics.drag(delta);
+    this.setPosition(pos);
+  }
+
+  public release(velocity: number): void {
+    if (this.navType !== 'thumbs' || !this.physics) return;
+    this.physics.release(velocity);
+  }
+
+  public destroy(): void {
+    if (this.time) {
+      this.time.remove(this.tick.bind(this));
     }
   }
 }

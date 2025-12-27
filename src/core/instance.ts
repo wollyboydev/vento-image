@@ -2,9 +2,7 @@ import { GalleryState, GalleryItem } from '../state/types';
 import { GalleryStore } from '../state/store';
 import { VentoOptions } from './options';
 import { EventEmitter, GalleryEvent } from './events';
-import { Renderer } from '../renderers/interface';
-import { DOMStageRenderer } from '../renderers/dom/stage';
-import { DOMNavRenderer } from '../renderers/dom/thumbnails';
+import { Renderer, SlideRenderer, ThumbnailsRenderer } from '../renderers';
 import { Plugin } from '../plugins/interface';
 import { parseHTML } from '../utils/dom';
 
@@ -14,6 +12,7 @@ import { KeyboardPlugin } from '../plugins/standard/keyboard';
 import { TouchPlugin } from '../plugins/standard/touch';
 import { FullscreenPlugin } from '../plugins/standard/fullscreen';
 import { VideoPlugin } from '../plugins/standard/video';
+// Physics
 
 export class Vento {
   public container: HTMLElement;
@@ -35,13 +34,22 @@ export class Vento {
   private plugins: Plugin[] = [];
   private unsubscribe: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private transitionTimer: any = null;
+  private lastStatus: string = 'IDLE';
+  private lastFullscreen: boolean = false;
 
   // Public exposure for plugins (e.g. fullscreen plugin)
   public fullscreenPlugin: FullscreenPlugin | null = null;
 
-  constructor(container: HTMLElement, frames: readonly GalleryItem[], options: VentoOptions = {}) {
+  constructor(
+    container: HTMLElement,
+    frames: readonly GalleryItem[],
+    renderers: { stage: Renderer; nav?: Renderer },
+    options: VentoOptions = {}
+  ) {
     if (!container) throw new Error('Vento: container element is required');
     if (!frames || frames.length === 0) throw new Error('Vento: at least one frame is required');
+    if (!renderers || !renderers.stage) throw new Error('Vento: Stage Renderer is required');
 
     this.container = container;
     this.events = new EventEmitter();
@@ -63,9 +71,8 @@ export class Vento {
       width: null,
       height: null,
       showCaption: true,
-      renderer: 'dom', // Default to DOM
       ...options,
-    };
+    } as Required<VentoOptions>;
 
     const initialState: GalleryState = {
       frames: Object.freeze([...frames]),
@@ -83,20 +90,20 @@ export class Vento {
     // Booting up
     this.createDOM();
 
-    // Renderers Factory
-    if (this.options.renderer === 'webgl') {
-      // Future: this.stageRenderer = new WebGLStageRenderer(...)
-      console.warn('WebGL renderer not implemented yet, falling back to DOM');
-      this.stageRenderer = new DOMStageRenderer(this.stageShaft, this.options.transitionDuration);
-    } else {
-      this.stageRenderer = new DOMStageRenderer(this.stageShaft, this.options.transitionDuration);
-    }
+    // Renderers Injection & Init
+    this.stageRenderer = renderers.stage;
+    this.stageRenderer.init(this.stageShaft, this.options);
 
-    this.navRenderer = new DOMNavRenderer(
-      this.navShaft,
-      this.options.nav,
-      this.options.navDirection
-    );
+    if (renderers.nav && this.options.nav) {
+      this.navRenderer = renderers.nav;
+      this.navRenderer.init(this.navShaft, this.options);
+    } else {
+      this.navRenderer = {
+        init: () => {},
+        update: () => {},
+        setFrames: () => {},
+      };
+    }
 
     this.stageRenderer.setFrames([...frames]);
     this.navRenderer.setFrames([...frames]);
@@ -129,11 +136,6 @@ export class Vento {
 
     this.stageShaft = parseHTML(`<div class="vento-stage-shaft flex"> </div>`);
     this.stageShaft.style.setProperty('--offset', '0px');
-    this.stageShaft.style.transform = 'translate3d(var(--offset), 0, 0)';
-
-    // Initial transition setup moved to CSS ideally, but here for compat
-    this.stageShaft.style.transition = 'transform 200ms ease';
-
     this.stage.appendChild(this.stageShaft);
 
     if (this.options.arrows) {
@@ -160,7 +162,6 @@ export class Vento {
       this.navShaft.className = `vento-nav-shaft vento-nav-${this.options.nav}`;
       this.navShaft.setAttribute('role', 'tablist');
 
-      // Styling should be in CSS, but keeping inline for parity with old main.ts
       if (this.options.nav === 'thumbs') {
         this.navShaft.style.display = 'flex';
         this.navShaft.style.flexDirection =
@@ -185,8 +186,6 @@ export class Vento {
     }
 
     if (this.options.fullscreen) {
-      // Only add button if not 'native' or handled elsewhere?
-      // main.ts added it blindly if options.fullscreen was trueish
       const btn = parseHTML(`
         <button class="vento-fullscreen-btn" style="border: 1px solid white;" aria-label="Toggle fullscreen" type="button"></button>
       `);
@@ -275,21 +274,31 @@ export class Vento {
       }
     }
 
-    this.emit('change', state);
-
-    if (state.status === 'TRANSITIONING') {
-      setTimeout(() => {
+    if (state.status === 'TRANSITIONING' && this.lastStatus !== 'TRANSITIONING') {
+      if (this.transitionTimer) clearTimeout(this.transitionTimer);
+      this.transitionTimer = setTimeout(() => {
         this.store.dispatch({ type: 'END_TRANSITION' });
         this.emit('showend');
+        this.transitionTimer = null;
       }, this.options.transitionDuration);
     }
 
-    if (state.isFullscreen) {
-      this.container.classList.add('is-fullscreen');
-      this.emit('fullscreenenter');
-    } else {
-      this.container.classList.remove('is-fullscreen');
-      this.emit('fullscreenexit');
+    if (state.status === 'DRAGGING' && this.transitionTimer) {
+      clearTimeout(this.transitionTimer);
+      this.transitionTimer = null;
+    }
+
+    this.lastStatus = state.status;
+
+    if (state.isFullscreen !== this.lastFullscreen) {
+      this.lastFullscreen = state.isFullscreen;
+      if (state.isFullscreen) {
+        this.container.classList.add('is-fullscreen');
+        this.emit('fullscreenenter');
+      } else {
+        this.container.classList.remove('is-fullscreen');
+        this.emit('fullscreenexit');
+      }
     }
   }
 

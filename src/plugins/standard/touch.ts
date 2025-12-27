@@ -5,8 +5,9 @@ export class TouchPlugin implements Plugin {
   private stageShaft: HTMLElement | null = null;
   private startX = 0;
   private startY = 0;
-  private currentX = 0;
-  private currentY = 0;
+  private lastX = 0;
+  private lastTime = 0;
+  private velocity = 0;
   private isDragging = false;
   private threshold = 50;
   private handlers: {
@@ -20,7 +21,7 @@ export class TouchPlugin implements Plugin {
     pointerup: () => {},
     pointercancel: () => {},
   };
-  private currentTranslateX = 0;
+
   private containerWidth = 0;
   private currentIndex = 0;
   private totalFrames = 0;
@@ -28,8 +29,6 @@ export class TouchPlugin implements Plugin {
 
   attach(gallery: any): void {
     this.gallery = gallery;
-    // Assuming gallery exposes stageRenderer or we can get it
-    // In new arch, we might want a stricter way, but for refactor parity:
     this.stageShaft = gallery.stageRenderer?.stageShaft;
 
     if (!this.stageShaft) return;
@@ -39,7 +38,6 @@ export class TouchPlugin implements Plugin {
       this.currentIndex = state.currentIndex;
       this.totalFrames = state.frames.length;
       this.containerWidth = this.stageShaft.parentElement?.offsetWidth || 0;
-      this.currentTranslateX = -this.currentIndex * this.containerWidth;
     }
 
     this.handlers.pointerdown = this.handlePointerDown.bind(this);
@@ -66,30 +64,32 @@ export class TouchPlugin implements Plugin {
     if (e.button !== 0) return;
 
     const state = this.gallery?.store?.getState();
-    if (!state || state.status === 'TRANSITIONING') return;
+    if (!state) return;
 
     this.isDragging = true;
     this.isSwiping = false;
     this.startX = e.clientX;
     this.startY = e.clientY;
-    this.currentX = this.startX;
-    this.currentY = this.startY;
+    this.lastX = this.startX;
+    this.lastTime = performance.now();
+    this.velocity = 0;
 
-    this.containerWidth = this.stageShaft?.parentElement?.offsetWidth || 0;
     this.currentIndex = state.currentIndex;
-    this.currentTranslateX = -this.currentIndex * this.containerWidth;
 
+    if (this.stageShaft) {
+      this.stageShaft.style.cursor = 'grabbing';
+    }
+
+    // Stop and set status to DRAGGING immediately on down
     if (this.gallery) {
       this.gallery.store?.dispatch({
         type: 'SET_DRAGGING',
         isDragging: true,
       });
-    }
 
-    if (this.stageShaft) {
-      this.stageShaft.style.transition = 'none';
-      this.stageShaft.style.cursor = 'grabbing';
-      this.stageShaft.setPointerCapture(e.pointerId);
+      if (this.gallery.stageRenderer?.stop) {
+        this.gallery.stageRenderer.stop();
+      }
     }
 
     document.addEventListener('pointermove', this.handlers.pointermove);
@@ -101,19 +101,41 @@ export class TouchPlugin implements Plugin {
     if (!this.isDragging || !this.stageShaft) return;
 
     e.preventDefault();
-    this.currentX = e.clientX;
-    this.currentY = e.clientY;
 
-    const deltaX = this.currentX - this.startX;
-    const deltaY = this.currentY - this.startY;
+    if (!this.isSwiping) {
+      const dx = e.clientX - this.startX;
+      const dy = e.clientY - this.startY;
+      if (Math.abs(dx) > 5) {
+        // Threshold
+        this.isSwiping = true;
+        this.lastX = e.clientX; // Reset lastX to avoid jump
+        this.lastTime = performance.now();
 
-    if (!this.isSwiping && Math.abs(deltaX) > 5) {
-      this.isSwiping = true;
+        if (this.gallery) {
+          this.gallery.store?.dispatch({
+            type: 'SET_DRAGGING',
+            isDragging: true,
+          });
+        }
+        // Capture pointer to ensure we get events even if user drags outside
+        this.stageShaft.setPointerCapture(e.pointerId);
+      }
     }
 
-    if (this.isSwiping && Math.abs(deltaX) > Math.abs(deltaY)) {
-      const newTranslateX = this.currentTranslateX + deltaX;
-      this.stageShaft.style.transform = `translateX(${newTranslateX}px)`;
+    if (this.isSwiping) {
+      const now = performance.now();
+      const dt = now - this.lastTime;
+      const currentX = e.clientX;
+      const dx = currentX - this.lastX;
+
+      if (dt > 0) {
+        this.velocity = dx / dt; // px/ms
+      }
+
+      this.lastX = currentX;
+      this.lastTime = now;
+
+      this.gallery.stageRenderer.drag(dx);
     }
   }
 
@@ -129,13 +151,17 @@ export class TouchPlugin implements Plugin {
 
     this.stageShaft.style.cursor = 'grab';
 
-    const deltaX = this.currentX - this.startX;
-    const deltaY = this.currentY - this.startY;
+    const deltaX = e.clientX - this.startX;
 
-    if (this.isSwiping && Math.abs(deltaX) > Math.abs(deltaY)) {
+    if (this.isSwiping) {
+      const heavyVelocity = this.velocity * 16;
+
+      if (this.gallery?.stageRenderer?.release) {
+        this.gallery.stageRenderer.release(heavyVelocity);
+      }
+
       const dragDistance = Math.abs(deltaX);
-      const dragVelocity = dragDistance / 300;
-      const shouldChange = dragDistance > this.threshold || dragVelocity > 0.5;
+      const shouldChange = dragDistance > this.threshold || Math.abs(this.velocity) > 0.5;
 
       if (shouldChange) {
         if (deltaX > 0 && this.gallery) {
@@ -148,8 +174,23 @@ export class TouchPlugin implements Plugin {
       } else if (this.gallery) {
         this.gallery.goTo(this.currentIndex);
       }
-    } else if (this.gallery) {
-      this.gallery.goTo(this.currentIndex);
+    } else {
+      if (this.gallery?.stageRenderer?.getPosition && this.containerWidth > 0) {
+        const currentPos = this.gallery.stageRenderer.getPosition();
+        const frameWidth = this.containerWidth;
+
+        const nearestIndex = Math.round(Math.abs(currentPos) / frameWidth);
+        const clampedIndex = Math.max(0, Math.min(nearestIndex, this.totalFrames - 1));
+
+        const targetPos = clampedIndex * frameWidth * -1;
+        if (this.gallery.stageRenderer.forceSet) {
+          this.gallery.stageRenderer.forceSet(targetPos);
+        }
+
+        if (clampedIndex !== this.currentIndex) {
+          this.gallery.goTo(clampedIndex);
+        }
+      }
     }
 
     this.isDragging = false;

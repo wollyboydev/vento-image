@@ -60,16 +60,13 @@ export const rootReducer = (state: GalleryState, action: GalleryAction): Gallery
       };
 
     case 'START_AUTOPLAY':
-      // Autoplay state managed by plugin, but we might want to track intent here later
-      return state;
-
     case 'STOP_AUTOPLAY':
       return state;
 
     case 'SET_DRAGGING':
       return {
         ...state,
-        status: action.isDragging ? 'DRAGGING' : state.status,
+        status: action.isDragging ? 'DRAGGING' : 'IDLE',
       };
 
     default:
