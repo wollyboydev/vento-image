@@ -22,16 +22,27 @@ yarn add vento-image
 ## Usage
 
 ```typescript
-import { Vento } from 'vento-image';
+import { Vento, SlideRenderer, ThumbnailsRenderer } from 'vento-image';
 
-// Initialize with your images
-const gallery = new Vento(document.getElementById('gallery'), {
-  // Options
-  autoplay: 3000, // Auto-advance every 3 seconds
-  loop: true,
-  transition: 'slide',
-  // ... more options
-});
+// 1. Instantiate specialized renderers (Lens Pattern)
+const stageRenderer = new SlideRenderer();
+const navRenderer = new ThumbnailsRenderer();
+
+// 2. Initialize Vento
+const gallery = new Vento(
+  document.getElementById('gallery'),
+  items, // Array of GalleryItem
+  {
+    stage: stageRenderer,
+    nav: navRenderer,
+  },
+  {
+    autoplay: 3000,
+    loop: true,
+    transition: 'slide',
+    nav: 'thumbs',
+  }
+);
 ```
 
 ## Development
