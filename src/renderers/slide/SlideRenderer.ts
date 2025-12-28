@@ -1,46 +1,25 @@
 import { GalleryState, GalleryItem } from '../../state/types';
 import { Renderer } from '../types';
 import { VentoOptions } from '../../core/options';
-import { SnapPhysics } from './SnapPhysics';
-import { PhysicsStrategy } from '../../engine/physics/Strategy';
-import { Time } from '../../engine/Time';
 
 export class SlideRenderer implements Renderer {
   public stageShaft!: HTMLElement;
   private stageFrames: HTMLElement[] = [];
   private transitionDuration: number = 300;
-  private physics!: PhysicsStrategy;
-  private time!: Time;
+  private currentPosition: number = 0;
 
   public init(root: HTMLElement, options: Required<VentoOptions>): void {
     this.stageShaft = root;
     this.transitionDuration = options.transitionDuration;
-
-    this.physics = new SnapPhysics({
-      friction: 0.9,
-      spring: 0.08,
-    });
-
-    this.time = Time.getInstance();
-    this.time.add(this.tick.bind(this));
+    this.stageShaft.style.transition = `transform ${this.transitionDuration}ms ease`;
   }
 
   public update(state: GalleryState): void {
-    const { frames, currentIndex, status, transitionType } = state;
-
+    const { frames, currentIndex, status } = state;
     const container = this.stageShaft.parentElement;
     if (!container || this.stageFrames.length === 0) return;
 
-    let containerWidth = container.offsetWidth;
-    if (!containerWidth) containerWidth = container.clientWidth;
-    if (!containerWidth && container.getBoundingClientRect) {
-      containerWidth = container.getBoundingClientRect().width;
-    }
-
-    if (!containerWidth || containerWidth === 0) {
-      void container.offsetHeight;
-      containerWidth = container.offsetWidth || container.clientWidth || 0;
-    }
+    const containerWidth = container.offsetWidth || container.clientWidth || 0;
 
     if (containerWidth > 0) {
       const frameWidth = containerWidth;
@@ -51,32 +30,19 @@ export class SlideRenderer implements Renderer {
       const totalWidth = frames.length * frameWidth;
       this.stageShaft.style.width = `${totalWidth}px`;
 
-      const minBound = -(totalWidth - frameWidth);
-      const maxBound = 0;
-      this.physics.setBounds(minBound, maxBound);
-
       const targetPos = currentIndex * frameWidth * -1;
 
-      if (status !== 'DRAGGING') {
-        this.physics.setTarget(targetPos);
-      }
-
-      if (status === 'IDLE' && this.stageShaft.style.transform === '') {
-        this.physics.forceSet(targetPos);
+      // Handle transition state
+      if (status === 'DRAGGING') {
+        this.stageShaft.style.transition = 'none';
+      } else {
+        this.stageShaft.style.transition = `transform ${this.transitionDuration}ms ease`;
         this.setPosition(targetPos);
       }
-
-      this.stageShaft.style.transition = 'none';
-      this.stageShaft.style.transitionDuration = '0ms';
     }
 
     this.stageShaft.classList.toggle('is-transitioning', status === 'TRANSITIONING');
     this.stageShaft.classList.toggle('is-dragging', status === 'DRAGGING');
-    this.stageShaft.classList.toggle(
-      'transition-fade',
-      transitionType === 'fade' || transitionType === 'crossfade'
-    );
-    this.stageShaft.classList.toggle('transition-slide', transitionType === 'slide');
 
     this.stageFrames.forEach((frame, index) => {
       frame.classList.toggle('is-active', index === currentIndex);
@@ -127,41 +93,28 @@ export class SlideRenderer implements Renderer {
   }
 
   public setPosition(val: number): void {
+    this.currentPosition = val;
     this.stageShaft.style.transform = `translate3d(${val}px, 0, 0)`;
   }
 
-  public tick(deltaTime: number): void {
-    const changed = this.physics.update();
-    if (changed) {
-      this.setPosition(this.physics.getPosition());
-    }
-  }
-
-  public stop(): void {
-    this.physics.stop();
-  }
-
   public drag(delta: number): void {
-    const pos = this.physics.drag(delta);
-    this.setPosition(pos);
-  }
-
-  public release(velocity: number): void {
-    this.physics.release(velocity);
+    this.currentPosition += delta;
+    this.setPosition(this.currentPosition);
   }
 
   public getPosition(): number {
-    return this.physics.getPosition();
+    return this.currentPosition;
   }
 
   public forceSet(position: number): void {
-    this.physics.forceSet(position);
+    this.stageShaft.style.transition = 'none';
     this.setPosition(position);
+    // Force reflow
+    void this.stageShaft.offsetHeight;
+    this.stageShaft.style.transition = `transform ${this.transitionDuration}ms ease`;
   }
 
   public destroy(): void {
-    if (this.time) {
-      this.time.remove(this.tick.bind(this));
-    }
+    this.stageShaft.innerHTML = '';
   }
 }

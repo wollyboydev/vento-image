@@ -8,3 +8,4 @@ export * from './core/options';
 export * from './core/events';
 export * from './state/types';
 export * from './renderers';
+export * from './react';

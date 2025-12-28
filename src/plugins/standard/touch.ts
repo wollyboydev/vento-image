@@ -154,12 +154,6 @@ export class TouchPlugin implements Plugin {
     const deltaX = e.clientX - this.startX;
 
     if (this.isSwiping) {
-      const heavyVelocity = this.velocity * 16;
-
-      if (this.gallery?.stageRenderer?.release) {
-        this.gallery.stageRenderer.release(heavyVelocity);
-      }
-
       const dragDistance = Math.abs(deltaX);
       const shouldChange = dragDistance > this.threshold || Math.abs(this.velocity) > 0.5;
 
