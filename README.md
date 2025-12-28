@@ -63,4 +63,4 @@ const gallery = new Vento(
 
 ## License
 
-Closed source - Free for non-commercial use only. Commercial use requires explicit permission from the copyright holder.
+Distributed under the MIT License. See `LICENSE` for more information.
