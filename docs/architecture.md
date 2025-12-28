@@ -44,22 +44,22 @@ src/
 │   ├── Gestures.ts             # Higher-level gestures (Pinch/Tap)
 │   └── Keyboard.ts             # A11y & Shortcuts
 ├── renderers/                  # The Face (Presentation)
-│   ├── AbstractRenderer.ts     # The Contract
-│   ├── dom/                    # DOM Implementation (Standard)
-│   │   ├── DOMStage.ts
-│   │   ├── DOMThumbnails.ts
-│   │   └── utils/
-│   └── webgl/                  # WebGL Implementation (Future)
-│       ├── GLRenderer.ts
-│       ├── Shaders/
-│       └── Textures/
-├── modules/                    # The Features (Plugins)
-│   ├── Module.ts               # Base Interface
-│   ├── Zoom.ts
-│   ├── Video.ts
-│   ├── Autoplay.ts
-│   ├── Analytics.ts
-│   └── DeepLinking.ts
+│   ├── types.ts                # The Contract (Renderer Interface)
+│   ├── index.ts                # Main export entry
+│   ├── slide/                  # Primary Slide View
+│   │   ├── SlideRenderer.ts
+│   │   └── SnapPhysics.ts
+│   └── thumbnails/             # Navigation Bar
+│       ├── ThumbnailsRenderer.ts
+│       └── FreeScrollPhysics.ts
+├── plugins/                    # The Features (Plugins)
+│   ├── interface.ts            # Base Interface
+│   ├── standard/               # Default built-in plugins
+│   │   ├── autoplay.ts
+│   │   ├── fullscreen.ts
+│   │   ├── keyboard.ts
+│   │   ├── touch.ts
+│   │   └── video.ts
 └── utils/                      # Shared Helpers
     ├── dom.ts
     ├── browser.ts
@@ -95,7 +95,7 @@ export interface GalleryState {
   // --- Physics State ---
   position: number; // Actual float position (e.g. 2.5 = halfway between slide 2 and 3)
   velocity: number; // Current scroll speed
-  isDragging: boolean; // User finger down?
+  status: 'IDLE' | 'TRANSITIONING' | 'DRAGGING'; // High-level machine state
   isLocked: boolean; // Interaction disabled?
 
   // --- Viewport Metrics ---
@@ -206,12 +206,19 @@ export class Vento {
     this.events = new EventEmitter();
     this.store = new Store(createInitialState(options));
 
-    // 2. Select Renderer (Factory Pattern)
-    // This is where we decide "DOM" vs "WebGL"
-    if (options.renderer === 'webgl') {
-      this.renderer = new WebGLRenderer(root, this.store);
+    // 2. Renderers Injection & Init
+    this.stageRenderer = renderers.stage;
+    this.stageRenderer.init(this.stageShaft, this.options);
+
+    if (renderers.nav && this.options.nav) {
+      this.navRenderer = renderers.nav;
+      this.navRenderer.init(this.navShaft, this.options);
     } else {
-      this.renderer = new DOMRenderer(root, this.store);
+      this.navRenderer = {
+        init: () => {},
+        update: () => {},
+        setFrames: () => {},
+      };
     }
 
     // 3. Initialize Subsystems
@@ -306,12 +313,14 @@ export interface Renderer {
 }
 ```
 
-### 6.2 DOM Renderer Strategy (The "Virtual Slide" Pattern)
+### 6.2 Implementation Strategy (The "Modular Renderer" Pattern)
 
-Instead of moving `<ul>` which requires one huge layout, or using `transition` which limits interactivity, we use **independent transforms**.
+Instead of a monolithic renderer, we divide visibility into specialized components:
 
-- **Virtualization**: Only render `N-1`, `current`, `N+1` frames in the DOM. Remove others to save memory.
-- **Hardware Acceleration**: Use `translate3d` for GPU layering.
+- **SlideRenderer**: Optimized for large images/videos with snapping physics.
+- **ThumbnailsRenderer**: Optimized for many small items with free-scroll momentum.
+
+Each renderer encapsulates its own `PhysicsStrategy` to match its specific interaction model.
 
 **Optimization Note**:
 Inside `render()`:
@@ -529,14 +538,25 @@ vec4 transition(vec2 uv) {
 
 ## Appendix B: State Machine Diagram
 
+The Gallery follows a strict state machine via `GalleryStatus`. Physics simulation runs continuously but is steered by these high-level states.
+
 ```mermaid
 stateDiagram-v2
-    [*] --> Idle
-    Idle --> Dragging : PointerDown
-    Dragging --> Inertia : PointerUp
-    Inertia --> Snap : Velocity < Threshold
-    Snap --> Idle : Position == Target
+    [*] --> IDLE
 
-    Idle --> Animating : Next/Prev Click
-    Animating --> Idle : Animation Complete
+    IDLE --> DRAGGING : PointerDown (Catch/Hold)
+    TRANSITIONING --> DRAGGING : PointerDown (Interrupt/Catch)
+
+    DRAGGING --> TRANSITIONING : PointerUp (Resolve to Slide)
+    DRAGGING --> IDLE : PointerUp (Small movement snap)
+
+    IDLE --> TRANSITIONING : next() / prev() / goTo()
+    TRANSITIONING --> IDLE : showend (End Transition Timer)
 ```
+
+### Transition Descriptions:
+
+- **Catch/Interrupt**: `pointerdown` immediately halts the physics loop (`stop()`) and switches the status to `DRAGGING`.
+- **Resolve**: On `pointerup`, the system calculates the landing target. If a significant move/swipe occurred, it triggers a state change to `TRANSITIONING`.
+- **Snap**: If the movement was negligible, it snaps back to the nearest slide and returns to `IDLE`.
+- **Timeout**: `TRANSITIONING` is a temporary state that automatically reverts to `IDLE` after `transitionDuration` via the `END_TRANSITION` action.
